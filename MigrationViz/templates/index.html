@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+{% load staticfiles %} 
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>French Work Migrants</title>
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{% static "css/index.css" %}">
+    <!-- JS Script -->
+    <script src="https://d3js.org/d3.v4.min.js"></script>    
+    <script src="https://d3js.org/topojson.v1.min.js"></script>
+    <script src="{% static "js/tooltip.js" %}" type="text/javascript"></script>
+    <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
+</head>
+<body>
+  <!-- Map Title and subtitle -->
+  <div id="header">
+    <h1 id="mapTitle">FRANCE WORK MIGRATIONS</h1>
+    <h3 id="mapSubtitle">2016 RESIDENCE DEPARTMENT TO WORK DEPARTMENT</h3>
+  </div>
+  <!-- Main content -->
+  <div id='content'>
+    <!-- Left side of the page, 10 main destinations for workers comming from the south -->
+    <div id="leftScale">
+      <h4 class="scaleTitles">NORTHBOUND TO</h4>
+      <p class="scaleSubtitles">(TOP 10)</p>
+      <div id="dptNamesLeft" class="dptNames">
+        <p id="left1">PARIS + REGION</p>
+        <p id="left2">OISE</p>
+        <p id="left3">VAUCLUSE</p>
+        <p id="left4">SAÔNE-ET-LOIRE</p>
+        <p id="left5">ILLE-ET-VILAINE</p>
+        <p id="left6">DRÔME</p>
+        <p id="left7">ORNE</p>
+        <p id="left8">MAINE-ET-LOIRE</p>
+        <p id="left9">HAUT-RHIN</p>
+        <p id="left10">EURE</p>
+      </div>
+      <div id="dptAmountsLeft" class="dptAmounts">
+        <p>36,038</p>
+        <p>3,948</p>
+        <p>3,798</p>
+        <p>2,993</p>
+        <p>2,453</p>
+        <p>2,176</p>
+        <p>1,922</p>
+        <p>1,334</p>
+        <p>1,171</p>
+        <p>1,119</p>
+      </div>
+    </div>
+    <!-- Map creation -->
+    <div id="mapContainer">
+      <svg width="900" height="780"></svg>
+      <script>
+        // Adjust links to original data sources
+        var urls = {
+          cit_ns: "{% static "csv/cities_ns.csv" %}",
+          cit_sn: "{% static "csv/cities_sn.csv" %}",
+          mig_ns: "{% static "csv/moves_NS.csv" %}",
+          mig_sn: "{% static "csv/moves_SN.csv" %}",
+        };
+        // Select svg tag 
+        var svg = d3.select("svg");
+
+        // Append contener "g" to group objects, any modification to g will be applied to its children (same for its attributes)
+        var plot = svg.append("g").attr("id", "plot");
+
+        // Dimensions of our SVG
+        var width  = +svg.attr("width");
+        var height = +svg.attr("height");
+        var radius = {min: 6, max: 12};
+
+        // Placeholder for state data once loaded
+        var land = null;
+
+        // Only focus on the continental France
+        var projection = d3.geoConicConformal()
+            .center([2.454071, 46.279229])
+            .scale(4300) // Précédement la valeur était 3000
+            .translate([width / 2, height / 2]);
+
+        // Trigger map drawing
+        d3.json("{% static "json/france.json" %}", drawMap);
+
+        // Draw the metropolitan France (and Corsica)
+        function drawMap(error, regions) {
+          land = topojson.feature(regions, regions.objects.regions);
+
+          // draw base map with departments borders
+          var base = plot.append("g").attr("id", "basemap");
+          var path = d3.geoPath(projection);
+          
+          // Draw map from departments (instead of a global drawing)
+          base.selectAll("path")
+              .data(land.features) // Access the polygons and multipolygons to draw departments
+              .enter().append("path")
+              .attr("class", "land")
+              .attr("id", function(d, i){
+                return "dpt_" + i;
+              })
+              .attr("d", path); // Style is in CSS file
+
+          // Trigger data drawing with no caching otherwise updates of csv files not taken into account
+          d3.queue()
+            .defer(d3.csv, urls.cit_ns + '?' + Math.floor(Math.random() * 1000))
+            .defer(d3.csv, urls.mig_ns + '?' + Math.floor(Math.random() * 1000))
+            .await(filterData_ns);
+          
+          d3.queue()
+            .defer(d3.csv, urls.cit_sn + '?' + Math.floor(Math.random() * 1000))
+            .defer(d3.csv, urls.mig_sn + '?' + Math.floor(Math.random() * 1000))
+            .await(filterData_sn);
+        }
+
+        // Need a much smaller subgraph for edge bundling
+        function filterData_ns(error, cities_ns, moves_ns) {
+          if(error) throw error;
+
+          // get map of airport objects by department value
+          var bydpt = d3.map(cities_ns, function(d) { return d.dpt; });
+          console.log("Loaded " + bydpt.size() + " cities.");
+
+          // convert links into better format and track node degree
+          moves_ns.forEach(function(d) {
+            d.source = bydpt.get(d.dept_res);
+            d.target = bydpt.get(d.dept_work);
+
+            d.source.degree = d.source.degree + 1;
+            d.target.degree = d.target.degree + 1;
+          });
+
+          // calculate projected x, y pixel locations
+          cities_ns.forEach(function(d) {
+            var coords = projection([d.longitude, d.latitude]);
+            d.x = coords[0];
+            d.y = coords[1];
+          });
+
+          // reset map to only contain airports post filter
+          bydpt = d3.map(cities_ns, function(d) { return d.dpt; });
+
+          // start drawing everything
+          drawData_ns(bydpt.values(), moves_ns);
+        }
+
+        function filterData_sn(error, cities_sn, moves_sn) {
+          if(error) throw error;
+
+          // get map of airport objects by department value
+          var bydpt = d3.map(cities_sn, function(d) { return d.dpt; });
+          console.log("Loaded " + bydpt.size() + " cities.");
+
+          // convert links into better format and track node degree
+          moves_sn.forEach(function(d) {
+            d.source = bydpt.get(d.dept_res);
+            d.target = bydpt.get(d.dept_work);
+
+            d.source.degree = d.source.degree + 1;
+            d.target.degree = d.target.degree + 1;
+          });
+
+          // calculate projected x, y pixel locations
+          cities_sn.forEach(function(d) {
+            var coords = projection([d.longitude, d.latitude]);
+            d.x = coords[0];
+            d.y = coords[1];
+          });
+
+          // reset map to only contain airports post filter
+          bydpt = d3.map(cities_sn, function(d) { return d.dpt; });
+
+          // start drawing everything
+          drawData_sn(bydpt.values(), moves_sn);
+        }
+
+        // Draw cities and migrations North South using edge bundling
+        function drawData_ns(cities_ns, moves_ns) {
+          // setup and start edge bundling
+          var bundle = generateSegments(cities_ns, moves_ns);
+
+          // https://github.com/d3/d3-shape#curveBundle
+          var line = d3.line()
+            .curve(d3.curveBundle)
+            .x(function(d) { return d.x; })
+            .y(function(d) { return d.y; });
+
+          var links = plot.append("g").attr("id", "moves_NS")
+            .selectAll("path.move_NS")
+            .data(bundle.paths)
+            .enter()
+            .append("path")
+            .attr("class", "move_NS")
+            .attr("id", function(d, i){
+              return "edge_ns" + i;
+            })
+            .attr("d", line); // Style in CSS file
+
+          // Create list of weight (number of people) for each edge
+          weight_ns = []
+          moves_ns.forEach(function(d) {
+            weight_ns.push(d.flow_weight)
+          })
+
+          // Space between dots will change dynamically
+          d3.selectAll(".move_NS").each(function(d, i) {
+            d3.select("#edge_ns" + i)
+              .style("stroke-dasharray", (1 + "," + weight_ns[i]/10));
+          })
+
+          // https://github.com/d3/d3-force
+          var layout = d3.forceSimulation()
+            // settle at a layout faster
+            .alphaDecay(0.1)
+            // nearby nodes attract each other
+            .force("charge", d3.forceManyBody()
+              .strength(15)
+              .distanceMax(radius.max * 2)
+            )
+            // edges want to be as short as possible
+            // prevents too much stretching
+            .force("link", d3.forceLink()
+              .strength(0.1)
+              .distance(0)
+            )
+            .on("tick", function(d) {
+              links.attr("d", line);
+            })
+            .on("end", function(d) {
+              console.log("Layout complete!");
+            });
+
+          layout.nodes(bundle.nodes).force("link").links(bundle.links);
+
+          // draw cities
+          var scale = d3.scaleSqrt()
+            .domain(d3.extent(cities_ns, function(d) { return d.degree; }))
+            .range([radius.min, radius.max]);
+
+          plot.append("g").attr("id", "cities_ns")
+            .selectAll("circle.city_ns")
+            .data(cities_ns)
+            .enter()
+            .append("circle")
+            .attr("class", "city_ns")
+            .attr("id", function(d) { 
+              if(d.dpt === '01' || d.dpt === '02' || d.dpt === '03' || d.dpt === '04' || d.dpt === '13' || d.dpt === '14' || d.dpt === '15'
+              || d.dpt === '16' || d.dpt === '17' || d.dpt === '18' || d.dpt === '19' || d.dpt === '21' || d.dpt === '22' || d.dpt === '23') {
+                return "dpt_" + (parseInt(d.dpt) + 5)
+              } else if (d.dpt === '06' || d.dpt === '07' || d.dpt === '08' || d.dpt === '09' || d.dpt === '10' || d.dpt === '11'|| d.dpt === '12') {
+                  return "dpt_" + (parseInt(d.dpt) + 4)
+              } else if (d.dpt === '24' || d.dpt === '25' || d.dpt === '26' || d.dpt === '32' || d.dpt === '33') {
+                  return "dpt_" + (parseInt(d.dpt) + 6)
+              } else if (d.dpt === '27' || d.dpt === '28' || d.dpt === '29' || d.dpt === '30') {
+                  return "dpt_" + (parseInt(d.dpt) + 7)
+              } else if (d.dpt === '77' || d.dpt === '80' || d.dpt === '81' || d.dpt === '82') {
+                  return "dpt_" + (parseInt(d.dpt) + 9)
+              } else if (d.dpt === '31' || d.dpt === '76' || d.dpt === '88' || d.dpt === '89') {
+                  return "dpt_" + (parseInt(d.dpt) + 11)
+              } else if (d.dpt === '71' || d.dpt === '72' || d.dpt === '73' || d.dpt === '83' || d.dpt === '84' || d.dpt === '85' || d.dpt === '86') {
+                  return "dpt_" + (parseInt(d.dpt) + 12)
+              } else if (d.dpt === '53' || d.dpt === '54' || d.dpt === '55' || d.dpt === '56' || d.dpt === '57' || d.dpt === '58' || d.dpt === '59'
+              || d.dpt === '60' || d.dpt === '61' || d.dpt === '66') {
+                  return "dpt_" + (parseInt(d.dpt) + 15)
+              } else if (d.dpt === '44' || d.dpt === '45' || d.dpt === '46' || d.dpt === '47' || d.dpt === '48' || d.dpt === '49' || d.dpt === '50'
+              || d.dpt === '51' || d.dpt === '62' || d.dpt === '63' || d.dpt === '64') {
+                  return "dpt_" + (parseInt(d.dpt) + 16)
+              } else if (d.dpt === '34' || d.dpt === '35' || d.dpt === '36' || d.dpt === '37' || d.dpt === '38' || d.dpt === '39' || d.dpt === '40'
+              || d.dpt === '41' || d.dpt === '42') {
+                  return "dpt_" + (parseInt(d.dpt) + 17)
+              } else if (d.dpt === '05') {
+                  return "dpt_48"
+              } else if (d.dpt === '43') {
+                  return "dpt_43"
+              } else if (d.dpt === '2A') {
+                  return "dpt_25"
+              } else if (d.dpt === '2B') {
+                  return "dpt_41"
+              } else if (d.dpt === '52') {
+                  return "dpt_44"
+              } else if (d.dpt === '05') {
+                  return "dpt_48"
+              } else if (d.dpt === '65') {
+                  return "dpt_49"
+              } else if (d.dpt === '68') {
+                  return "dpt_40"
+              } else if (d.dpt === '69') {
+                  return "dpt_82"
+              } else if (d.dpt === '70') {
+                  return "dpt_45"
+              } else if (d.dpt === '74') {
+                  return "dpt_46"
+              } else if (d.dpt === '75') {
+                  return "dpt_77"
+              } else if (d.dpt === '78') {
+                  return "dpt_101"
+              } else if (d.dpt === '79') {
+                  return "dpt_29"
+              } else if (d.dpt === '87') {
+                  return "dpt_47"
+              } else if (d.dpt === '90') {
+                  return "dpt_92"
+              } else if (d.dpt === '91') {
+                  return "dpt_33"
+              } else if (d.dpt === '92') {
+                  return "dpt_50"
+              } else if (d.dpt === '93') {
+                  return "dpt_88"
+              } else if (d.dpt === '94') {
+                  return "dpt_94"
+              } else if (d.dpt === '95') {
+                  return "dpt_93"
+              } else if (d.dpt === '67') {
+                  return "dpt_17"
+              }
+            })
+            .attr("r", "5")
+            .attr("cx", function(d) { return d.x; })
+            .attr("cy", function(d) { return d.y; })
+            .style("fill", "white")
+            .style("opacity", 0)
+            //.style("stroke", "#252525")
+            .on("mouseover", onMouseOver)
+            .on("mousemove", onMouseMove)
+            .on("mouseout", onMouseOut);
+
+          animatelines();
+        }
+
+        // Draw cities and migrations South North using edge bundling
+        function drawData_sn(cities_sn, moves_sn) {
+          // setup and start edge bundling
+          var bundle = generateSegments(cities_sn, moves_sn);
+
+          // https://github.com/d3/d3-shape#curveBundle
+          var line = d3.line()
+            .curve(d3.curveBundle)
+            .x(function(d) { return d.x; })
+            .y(function(d) { return d.y; });
+
+          var links = plot.append("g").attr("id", "moves_SN")
+            .selectAll("path.move_SN")
+            .data(bundle.paths)
+            .enter()
+            .append("path")
+            .attr("class", "move_SN")
+            .attr("id", function(d, i){
+              return "edge_sn" + i;
+            })
+            .attr("d", line); // Style in CSS file
+
+          // Create list of weight (number of people) for each edge
+          weight_sn = []
+          moves_sn.forEach(function(d) {
+            weight_sn.push(d.flow_weight)
+          })
+
+          // Space between dots will change dynamically
+          d3.selectAll(".move_SN").each(function(d, i) {
+            d3.select("#edge_sn" + i)
+              .style("stroke-dasharray", (1 + "," + weight_sn[i]/10));
+          })
+
+          // https://github.com/d3/d3-force
+          var layout = d3.forceSimulation()
+            // settle at a layout faster
+            .alphaDecay(0.1)
+            // nearby nodes attract each other
+            .force("charge", d3.forceManyBody()
+              .strength(15)
+              .distanceMax(radius.max * 2)
+            )
+            // edges want to be as short as possible
+            // prevents too much stretching
+            .force("link", d3.forceLink()
+              .strength(0.1)
+              .distance(0)
+            )
+            .on("tick", function(d) {
+              links.attr("d", line);
+            })
+            .on("end", function(d) {
+              console.log("Layout complete!");
+            });
+
+          layout.nodes(bundle.nodes).force("link").links(bundle.links);
+
+          // draw airports
+          var scale = d3.scaleSqrt()
+            .domain(d3.extent(cities_sn, function(d) { return d.degree; }))
+            .range([radius.min, radius.max]);
+
+          plot.append("g").attr("id", "cities_sn")
+            .selectAll("circle.city_sn")
+            .data(cities_sn)
+            .enter()
+            .append("circle")
+            .attr("class", "city_sn")
+            .attr("id", function(d) { 
+              if(d.dpt === '01' || d.dpt === '02' || d.dpt === '03' || d.dpt === '04' || d.dpt === '13' || d.dpt === '14' || d.dpt === '15'
+              || d.dpt === '16' || d.dpt === '17' || d.dpt === '18' || d.dpt === '19' || d.dpt === '21' || d.dpt === '22' || d.dpt === '23') {
+                return "dpt_" + (parseInt(d.dpt) + 5)
+              } else if (d.dpt === '06' || d.dpt === '07' || d.dpt === '08' || d.dpt === '09' || d.dpt === '10' || d.dpt === '11' || d.dpt === '12') {
+                  return "dpt_" + (parseInt(d.dpt) + 4)
+              } else if (d.dpt === '24' || d.dpt === '25' || d.dpt === '26' || d.dpt === '32' || d.dpt === '33') {
+                  return "dpt_" + (parseInt(d.dpt) + 6)
+              } else if (d.dpt === '27' || d.dpt === '28' || d.dpt === '29' || d.dpt === '30') {
+                  return "dpt_" + (parseInt(d.dpt) + 7)
+              } else if (d.dpt === '77' || d.dpt === '80' || d.dpt === '81' || d.dpt === '82') {
+                  return "dpt_" + (parseInt(d.dpt) + 9)
+              } else if (d.dpt === '31' || d.dpt === '76' || d.dpt === '88' || d.dpt === '89') {
+                  return "dpt_" + (parseInt(d.dpt) + 11)
+              } else if (d.dpt === '71' || d.dpt === '72' || d.dpt === '73' || d.dpt === '83' || d.dpt === '84' || d.dpt === '85' || d.dpt === '86') {
+                  return "dpt_" + (parseInt(d.dpt) + 12)
+              } else if (d.dpt === '53' || d.dpt === '54' || d.dpt === '55' || d.dpt === '56' || d.dpt === '57' || d.dpt === '58' || d.dpt === '59'
+              || d.dpt === '60' || d.dpt === '61' || d.dpt === '66') {
+                  return "dpt_" + (parseInt(d.dpt) + 15)
+              } else if (d.dpt === '44' || d.dpt === '45' || d.dpt === '46' || d.dpt === '47' || d.dpt === '48' || d.dpt === '49' || d.dpt === '50'
+              || d.dpt === '51' || d.dpt === '62' || d.dpt === '63' || d.dpt === '64') {
+                  return "dpt_" + (parseInt(d.dpt) + 16)
+              } else if (d.dpt === '34' || d.dpt === '35' || d.dpt === '36' || d.dpt === '37' || d.dpt === '38' || d.dpt === '39' || d.dpt === '40'
+              || d.dpt === '41' || d.dpt === '42') {
+                  return "dpt_" + (parseInt(d.dpt) + 17)
+              } else if (d.dpt === '05') {
+                  return "dpt_48"
+              } else if (d.dpt === '43') {
+                  return "dpt_43"
+              } else if (d.dpt === '2A') {
+                  return "dpt_25"
+              } else if (d.dpt === '2B') {
+                  return "dpt_41"
+              } else if (d.dpt === '52') {
+                  return "dpt_44"
+              } else if (d.dpt === '05') {
+                  return "dpt_48"
+              } else if (d.dpt === '65') {
+                  return "dpt_49"
+              } else if (d.dpt === '68') {
+                  return "dpt_40"
+              } else if (d.dpt === '69') {
+                  return "dpt_82"
+              } else if (d.dpt === '70') {
+                  return "dpt_45"
+              } else if (d.dpt === '74') {
+                  return "dpt_46"
+              } else if (d.dpt === '75') {
+                  return "dpt_77"
+              } else if (d.dpt === '78') {
+                  return "dpt_101"
+              } else if (d.dpt === '79') {
+                  return "dpt_29"
+              } else if (d.dpt === '87') {
+                  return "dpt_47"
+              } else if (d.dpt === '90') {
+                  return "dpt_92"
+              } else if (d.dpt === '91') {
+                  return "dpt_33"
+              } else if (d.dpt === '92') {
+                  return "dpt_50"
+              } else if (d.dpt === '93') {
+                  return "dpt_88"
+              } else if (d.dpt === '94') {
+                  return "dpt_94"
+              } else if (d.dpt === '95') {
+                  return "dpt_93"
+              } else if (d.dpt === '67') {
+                  return "dpt_17"
+              }
+            })
+            .attr("r", "5")
+            .attr("cx", function(d) { return d.x; })
+            .attr("cy", function(d) { return d.y; })
+            .style("fill", "white")
+            .style("opacity", 0)
+            //.style("stroke", "#252525")
+            .on("mouseover", onMouseOver)
+            .on("mousemove", onMouseMove)
+            .on("mouseout", onMouseOut);
+
+          animatelines();
+        }
+
+        // Animation of the flow (from source to target)
+        function animatelines() {	
+                // Animation for edges going North to South  			  
+                d3.selectAll(".move_NS")
+                  .transition()
+                  .duration(10000)
+                  .ease(d3.easeLinear) //Try linear, quad, bounce... see other examples here - http://bl.ocks.org/hunzy/9929724
+                  .on("start", function repeat() { // looping animation
+                    d3.active(this)
+                        .styleTween('stroke-dashoffset', function(d) {
+                          return d3.interpolate(450, 0);
+                        })
+                      .transition()
+                        .on("start", repeat);
+                  });
+                  
+                // Animation for edges going South to Norht
+                d3.selectAll(".move_SN")
+                  .transition()
+                  .duration(10000)
+                  .ease(d3.easeLinear) //Try linear, quad, bounce... see other examples here - http://bl.ocks.org/hunzy/9929724
+                  .on("start", function repeat() { // Looping animation
+                  d3.active(this)
+                      .styleTween('stroke-dashoffset', function(d) {
+                        return d3.interpolate(450, 0);
+                      })
+                    .transition()
+                      .on("start", repeat);
+                  }); 
+        }
+
+        // Turns a single edge into several segments that can be used for simple edge bundling.
+        function generateSegments(nodes, links) {
+          // calculate distance between two nodes
+          var distance = function(source, target) {
+            // sqrt( (x2 - x1)^2 + (y2 - y1)^2 )
+            var dx2 = Math.pow(target.x - source.x, 2);
+            var dy2 = Math.pow(target.y - source.y, 2);
+
+            return Math.sqrt(dx2 + dy2);
+          };
+
+          // max distance any two nodes can be apart is the hypotenuse!
+          var hypotenuse = Math.sqrt(width * width + height * height);
+
+          // number of inner nodes depends on how far nodes are apart
+          var inner = d3.scaleLinear()
+            .domain([0, hypotenuse])
+            .range([1, 15]);
+
+          // generate separate graph for edge bundling
+          // nodes: all nodes including control nodes
+          // links: all individual segments (source to target)
+          // paths: all segments combined into single path for drawing
+          var bundle = {nodes: [], links: [], paths: []};
+
+          // make existing nodes fixed
+          bundle.nodes = nodes.map(function(d, i) {
+            d.fx = d.x;
+            d.fy = d.y;
+            return d;
+          });
+
+          links.forEach(function(d, i) {
+            // calculate the distance between the source and target
+            var length = distance(d.source, d.target);
+
+            // calculate total number of inner nodes for this link
+            var total = Math.round(inner(length));
+
+            // create scales from source to target
+            var xscale = d3.scaleLinear()
+              .domain([0, total + 1]) // source, inner nodes, target
+              .range([d.source.x, d.target.x]);
+
+            var yscale = d3.scaleLinear()
+              .domain([0, total + 1])
+              .range([d.source.y, d.target.y]);
+
+            // initialize source node
+            var source = d.source;
+            var target = null;
+
+            // add all points to local path
+            var local = [source];
+
+            for (var j = 1; j <= total; j++) {
+              // calculate target node
+              target = {
+                x: xscale(j),
+                y: yscale(j)
+              };
+
+              local.push(target);
+              bundle.nodes.push(target);
+
+              bundle.links.push({
+                source: source,
+                target: target
+              });
+
+              source = target;
+            }
+
+            local.push(d.target);
+
+            // add last link to target node
+            bundle.links.push({
+              source: target,
+              target: d.target
+            });
+
+            bundle.paths.push(local);
+          });
+          
+          return bundle;
+        }
+      </script>
+    </div>
+    <!-- Right side of the page, 10 main departments for workers coming from the north-->
+    <div id="rightScale">
+      <h4 class="scaleTitles">SOUTHBOUND TO</h4>
+      <p class="scaleSubtitles">(TOP 10)</p>
+      <div id="dptNamesRight" class="dptNames">
+        <p id="right1">PARIS + REGION</p>
+        <p id="right2">BOUCHES-DU-RHÔNE</p>
+        <p id="right3">LOIRE-ATLANTIQUE</p>
+        <p id="right4">RHÔNE</p>
+        <p id="right5">GARD</p>
+        <p id="right6">EURE-ET-LOIR</p>
+        <p id="right7">MARNE</p>
+        <p id="right8">AIN</p>
+        <p id="right9">DEUX-SÈVRES</p>
+        <p id="right10">MAYENNE</p>
+      </div>
+      <div id="dptAmountsRight" class="dptAmounts">
+        <p>44,212</p>
+        <p>3,651</p>
+        <p>2,637</p>
+        <p>2,109</p>
+        <p>2,013</p>
+        <p>1,909</p>
+        <p>1,814</p>
+        <p>1,770</p>
+        <p>1,618</p>
+        <p>1,398</p>
+      </div>
+    </div>
+  </div>
+  <!-- Explainations for better understanding of the map -->
+  <div id="mapContext">
+    <p id="mapInfo" class="infoText">Each dot above represents 10 workers. A full year of migration takes place over 10 seconds.</p>
+    <p id="interactionInfo" class="infoText">To view a department hover on the map.</p>
+    <p id="contextInfo" class="infoText">Note : France is divided into 18 regions (13 in metropolitan France, including Corsica, and 5 overseas). Those regions are subdivided into departments. 
+    The focus is on metropolitan France and the people working in a department located in a different region than the one they live in. 
+    Only path with at least a hundred workers are displayed.</p>
+  </div>
+  <!-- Footer -->
+  <script src="{% static "js/legend.js" %}" type="text/javascript"></script>
+</body>
+</html>
