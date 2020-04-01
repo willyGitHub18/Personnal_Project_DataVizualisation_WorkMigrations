@@ -154,5 +154,19 @@ body {
 .infoText {
     color: #bababa;
     font-size: 11px;
+    margin-bottom: 3em;
 }
 
+/* Style the footer */
+#footer {
+    color: #FAFAFA;
+    font-size: 11px;
+}
+
+#footer a:link, a:visited {
+    color: #FAFAFA;
+}
+
+#footer p {
+    margin: 0.5em;
+}
