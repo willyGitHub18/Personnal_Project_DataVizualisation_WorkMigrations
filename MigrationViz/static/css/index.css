@@ -5,7 +5,7 @@ body {
 }
 
 #header {
-    width: 100%;
+    text-align: center;
 }
 
 /* Style titles */
@@ -32,7 +32,7 @@ body {
 }
 
 #mapContainer {
-    width: 70%;
+    width: 900px;
     height: 780px;
 }
 
@@ -146,7 +146,8 @@ body {
 /* Style text info after map */
 #mapContext {
     display: inline-block;
-    width: 40%;
+    text-align: center;
+    width: 800px;
     margin-right: 0;
 }
 
@@ -169,7 +170,7 @@ body {
 #footer {
     color: #FAFAFA;
     font-size: 11px;
-    width: 100%;
+    text-align: center;
 }
 
 #footer a:link, a:visited {
