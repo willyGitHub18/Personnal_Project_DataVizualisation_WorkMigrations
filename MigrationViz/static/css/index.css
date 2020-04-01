@@ -4,6 +4,10 @@ body {
     font-family: sans-serif;
 }
 
+#header {
+    width: 100%;
+}
+
 /* Style titles */
 #mapTitle {
     color: #FAFAFA;
@@ -28,7 +32,7 @@ body {
 }
 
 #mapContainer {
-    width: 900px;
+    width: 70%;
     height: 780px;
 }
 
@@ -142,7 +146,7 @@ body {
 /* Style text info after map */
 #mapContext {
     display: inline-block;
-    width: 800px;
+    width: 40%;
     margin-right: 0;
 }
 
@@ -151,16 +155,21 @@ body {
     padding: 0.1px;
 }
 
+#contextInfo {
+    margin-bottom: 4em;
+
+}
+
 .infoText {
     color: #bababa;
     font-size: 11px;
-    margin-bottom: 3em;
 }
 
 /* Style the footer */
 #footer {
     color: #FAFAFA;
     font-size: 11px;
+    width: 100%;
 }
 
 #footer a:link, a:visited {
@@ -168,5 +177,5 @@ body {
 }
 
 #footer p {
-    margin: 0.5em;
+    margin: 0.2em;
 }
