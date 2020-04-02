@@ -13,7 +13,7 @@
     <script src="{% static "js/tooltip.js" %}" type="text/javascript"></script>
     <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
 </head>
-<body>
+<body onload="sizeChange()">
   <!-- Map Title and subtitle -->
   <div id="header">
     <h1 id="mapTitle">FRANCE WORK MIGRATIONS</h1>
@@ -40,7 +40,7 @@
     </div>
     <!-- Map creation -->
     <div id="mapContainer">
-      <svg width="900" height="780"></svg>
+      <svg></svg>
       <script>
         // Adjust links to original data sources
         var urls = {
@@ -49,15 +49,21 @@
           mig_ns: "{% static "csv/moves_NS.csv" %}",
           mig_sn: "{% static "csv/moves_SN.csv" %}",
         };
+        
+        // Map responsivness
+        d3.select(window)
+            .on("resize", sizeChange);
+
         // Select svg tag 
         var svg = d3.select("svg");
+        d3.select("svg").attr("width", "100%")
 
         // Append contener "g" to group objects, any modification to g will be applied to its children (same for its attributes)
         var plot = svg.append("g").attr("id", "plot");
 
-        // Dimensions of our SVG
-        var width  = +svg.attr("width");
-        var height = +svg.attr("height");
+        // Base dimensions of our SVG
+        var width  = 900;
+        var height = 780;
         var radius = {min: 6, max: 12};
 
         // Placeholder for state data once loaded
@@ -66,7 +72,7 @@
         // Only focus on the continental France
         var projection = d3.geoConicConformal()
             .center([2.454071, 46.279229])
-            .scale(4300) // Précédement la valeur était 3000
+            .scale(4300)
             .translate([width / 2, height / 2]);
 
         // Trigger map drawing
@@ -100,6 +106,12 @@
             .defer(d3.csv, urls.cit_sn + '?' + Math.floor(Math.random() * 1000))
             .defer(d3.csv, urls.mig_sn + '?' + Math.floor(Math.random() * 1000))
             .await(filterData_sn);
+        }
+
+        // Responsivness of map, called onload
+        function sizeChange() {
+          d3.select("g").attr("transform", "scale(" + $("#mapContainer").width()/900 + ")");
+          $("svg").height($("#mapContainer").width()*0.867);
         }
 
         // Need a much smaller subgraph for edge bundling
