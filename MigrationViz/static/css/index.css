@@ -32,13 +32,15 @@ body {
     display: flex;
     flex-direction: row;
     justify-content: space-between;
+    align-items: center;
     max-width: 100%;
     width: auto;
 }
 
 #mapContainer {
     width: 900px;
-    height: 780px;
+    max-height: 780px;
+    height: auto;
 }
 
 /* Styling base map (country) */
@@ -96,8 +98,8 @@ body {
 /* Styling the departments top 10 (left and right side of the map) */
 #leftScale {
     color: #a6fafe;
-    margin-top: 100px;
-    margin-left: 10px;
+    margin-left: 35px;
+    margin-right: 10px;
     max-width: 25%;
     width: auto;
     height: auto;
@@ -105,15 +107,15 @@ body {
 
 #rightScale {
     color: #f06b44;
-    align-self: flex-end;
-    margin-bottom: 100px;
-    margin-right: 10px;
+    margin-left: 10px;
+    margin-right: 35px;
     max-width: 25%;
     width: auto;
     height: auto;
 }
 
 .scaleTitles {
+    font-size: 16px;
     width: auto;
     margin-block-end: 0.1em;
 }
@@ -189,3 +191,19 @@ body {
     margin: 0.2em;
     text-align: center;
 }
+
+/* Font-size responsiveness with viewport width scale */
+@media (max-width: 960px) {
+    #mapSubtitle, .scaleTitles {
+        font-size: 1.6vw;
+    }
+    .scaleSubtitles, .infoText, #footer {
+        font-size: 1.1vw;
+    }
+    .dptNames, .dptAmountsLeft, .dptAmountsRight {
+        font-size: 1.3vw;
+    }
+    #mapTitle {
+        font-size: 4vw;
+    }
+  }
